@@ -6,7 +6,7 @@
 " Last Change:  2017/3/22
 " =============================================================================
 
-let s:pid = 0       "xmake进程的pid
+let s:job = 0       "xmake进程的pid
 let s:run = 0       "构建成功后运行
 let s:target = ''   "要构建的目标，留空则为all
 
@@ -71,9 +71,9 @@ fun! s:runsh(...)
         exe '!./' p
     endif
 endf
-"检查是否已经存在s:pid
+"检查是否已经存在s:job
 fun! s:ChkPid()
-    if s:pid
+    if job#running(s:job)
         echom 'a xmake task is running'
         return 0
     else
@@ -98,7 +98,6 @@ fun! xmake#buildrun(run)
     let run = a:run
     let bin = s:getbin()
     fun! OnQuit(job, code) closure
-        let s:pid = 0
         if a:code    "如果出错则打开quickfix修正错误
             echo 'build failure'
             copen
@@ -115,41 +114,44 @@ fun! xmake#buildrun(run)
     endf
     cexpr ''
     "启动xmake运行
-    let s:pid = job#start(['xmake build', s:target], {
-                \ 'onout': funcref('CBAdd2qfb'),
+    let s:job = job#start(['xmake build', s:target], {
+                \ 'onout': funcref('job#cb#add2qfb'),
                 \ 'onexit': funcref('OnQuit')})
 endf
 "后台运行xmake命令
 fun! xmake#xmake(args)
     if !s:ChkPid() | return | endif
     cexpr ''
-    fun! OnQuit(job, code)
-        let s:pid = 0
-    endf
-    let s:pid = job#start(['xmake', a:args], {
-                \ 'onout': funcref('CBAdd2qfb'),
-                \ 'onexit': funcref('OnQuit')})
+    let opts = { 'onout': funcref('job#cb#add2qfb') }
+    if a:args =~ '^\s*config'
+        let opts.onexit = {job, code -> xmake#load()}
+    endif
+    let s:job = job#start('xmake ' . a:args, opts)
 endf
 
-fun! s:onConfig()
+fun! s:onLoaded(...)
     echo 'loaded xmake configuration'
     "设置窗口标题为项目名
     set title
-    let &titlestring = g:xcfg['project']
+    let config = g:xcfg.config
+    let &titlestring = join([g:xcfg['project'], config.mode, config.arch], ' - ')
+    redraw
 endf
+
+let s:path = expand('<sfile>:p:h')
 fun! xmake#load()
     let cache = []
     fun! LoadXCfg(job, code) closure
         try
             let m = join(cache)
             let g:xcfg = eval(m)
-            call s:onConfig()
+            call s:onLoaded()
         catch
             call log#info(m)
             echo 'load xmake configuration failure'
         endt
     endf
-    call job#start(['xmake', 'putconfig'], {
+    call job#start(['xmake lua', s:path . '/putconfig.lua'], {
                 \ 'onout': {job, d->add(cache, d)},
                 \ 'onexit': funcref('LoadXCfg')})
 endf
