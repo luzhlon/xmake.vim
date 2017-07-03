@@ -115,14 +115,15 @@ fun! xmake#buildrun(run)
     cexpr ''
     "启动xmake运行
     let s:job = job#start(['xmake build', s:target], {
-                \ 'onout': funcref('job#cb#add2qfb'),
+                \ 'onout': funcref('job#cb_add2qf'),
+                \ 'onerr': funcref('job#cb_add2qf'),
                 \ 'onexit': funcref('OnQuit')})
 endf
 "后台运行xmake命令
 fun! xmake#xmake(args)
     if !s:ChkPid() | return | endif
     cexpr ''
-    let opts = { 'onout': funcref('job#cb#add2qfb') }
+    let opts = { 'onout': funcref('job#cb_add2qf') }
     if a:args =~ '^\s*config'
         let opts.onexit = {job, code -> xmake#load()}
     endif
