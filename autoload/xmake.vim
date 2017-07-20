@@ -1,30 +1,29 @@
 " =============================================================================
 " Filename:     autoload/xmake.vim
 " Author:       luzhlon
-" Function:     xmake integeration
-" Depends:      proc.vim
-" Last Change:  2017/3/22
+" Function:     xmake's integeration
+" Depends:      job.vim
+" Last Change:  2017/7/20
 " =============================================================================
 
-let s:job = 0       "xmake进程的pid
-let s:run = 0       "构建成功后运行
-let s:target = ''   "要构建的目标，留空则为all
-
-"获取binary的target文件
+let s:job = 0       " subprocess of xmake
+let s:run = 0       " run this command after building successfully
+let s:target = ''   " target to build, build ALL if empty
+" Get the target's file path whoes kind is 'binary'
 fun! s:getbin()
     if empty(s:target)
-        for tf in values(g:xcfg['targets'])
+        for tf in values(g:xmproj['targets'])
             if tf['targetkind'] == 'binary'
                 return tf['targetfile']
             endif
         endfo
         return ''
     else
-        let tf = g:xcfg['targets'][s:target]
+        let tf = g:xmproj['targets'][s:target]
         return tf['targetkind'] == 'binary' ? tf['targetfile'] : ''
     endif
 endf
-"返回target所占用的buffer number
+" Get the bufnr about a target's sourcefiles and headerfiles
 fun! s:targetbufs(t)
     let nrs = {}
 try
@@ -40,29 +39,29 @@ catch
 endt
     return nrs
 endf
-"返回要保存的buffer number
+" Get the bufnrs to save
 fun! s:buf2save()
     if empty(s:target)
         let nrs = {}
-        for tf in values(g:xcfg['targets'])
+        for tf in values(g:xmproj['targets'])
             call extend(nrs, s:targetbufs(tf))
         endfo
     else
-        let nrs = s:targetbufs(g:xcfg['targets'][s:target])
+        let nrs = s:targetbufs(g:xmproj['targets'][s:target])
     endif
     return keys(nrs)
 endf
-"构建之前保存文件
+" Save the file before building
 fun! s:savafiles()
-    let n = bufnr('%')      "保存当前的buffer号
+    let n = bufnr('%')      " save current bufnr
     let bufnrs = s:buf2save()
-    for nr in bufnrs        "遍历项目文件，并保存
+    for nr in bufnrs        " traverse project's files, and save them
         exe nr . 'bufdo!' 'up'
     endfo
-    "切换到原来的buffer
+    " switch to original buffer
     exe 'b!' n
 endf
-"运行shell命令
+" Run shell command
 fun! s:runsh(...)
     let p = join(a:000)
     if has('win32')
@@ -71,8 +70,8 @@ fun! s:runsh(...)
         exe '!./' p
     endif
 endf
-"检查是否已经存在s:job
-fun! s:ChkPid()
+" If exists a xmake subprocess
+fun! s:checkRunning()
     if job#running(s:job)
         echom 'a xmake task is running'
         return 0
@@ -80,25 +79,24 @@ fun! s:ChkPid()
         return 1
     endif
 endf
-"检查是否加载了xmake configuration
-fun! s:ChkXCfg()
-    if exists('g:xcfg')
+" If loaded the xmake's configuration
+fun! s:checkXConfig()
+    if exists('g:xmproj')
         return 1
     else
         echom 'not load xmake configuration'
         return 0
     endif
 endf
-"调用xmake构建项目
+" Building by xmake
 fun! xmake#buildrun(run)
-    if !s:ChkXCfg() | return | endif
-    if !s:ChkPid() | return | endif
-    "保存项目文件
-    call s:savafiles()
+    if !s:checkXConfig() | return | endif
+    if !s:checkRunning() | return | endif
+    call s:savafiles()          " save files about the target to build
     let run = a:run
     let bin = s:getbin()
     fun! OnQuit(job, code) closure
-        if a:code    "如果出错则打开quickfix修正错误
+        if a:code               " open the quickfix if any errors
             echo 'build failure'
             copen
         else
@@ -113,15 +111,15 @@ fun! xmake#buildrun(run)
         endif
     endf
     cexpr ''
-    "启动xmake运行
+    " startup the xmake
     let s:job = job#start(['xmake build', s:target], {
                 \ 'onout': funcref('job#cb_add2qf'),
                 \ 'onerr': funcref('job#cb_add2qf'),
                 \ 'onexit': funcref('OnQuit')})
 endf
-"后台运行xmake命令
+" Run xmake in the background
 fun! xmake#xmake(args)
-    if !s:ChkPid() | return | endif
+    if !s:checkRunning() | return | endif
     cexpr ''
     let opts = { 'onout': funcref('job#cb_add2qf') }
     if a:args =~ '^\s*config'
@@ -131,12 +129,13 @@ fun! xmake#xmake(args)
 endf
 
 fun! s:onLoaded(...)
-    echo 'loaded xmake configuration'
-    "设置窗口标题为项目名
+    echohl Define
+    echom "Loaded xmake's configuration successfully"
     set title
-    let config = g:xcfg.config
-    let &titlestring = join([g:xcfg['project'], config.mode, config.arch], ' - ')
+    let config = g:xmproj.config
+    let &titlestring = join([g:xmproj['name'], config.mode, config.arch], ' - ')
     redraw
+    echohl
 endf
 
 let s:path = expand('<sfile>:p:h')
@@ -144,15 +143,17 @@ fun! xmake#load()
     let cache = []
     fun! LoadXCfg(job, code) closure
         try
-            let m = join(cache)
-            let g:xcfg = eval(m)
+            let m = split(join(cache, ''), '[\r\n]')[0]
+            let g:xmproj = eval(m)
             call s:onLoaded()
         catch
-            call log#info(m)
-            echo 'load xmake configuration failure'
+            echohl WarningMsg
+            cexpr m | copen
+            echom "Loaded xmake's configuration unsuccessfully"
+            echohl
         endt
     endf
-    call job#start(['xmake lua', s:path . '/putconfig.lua'], {
+    call job#start(['xmake lua', s:path . '/spy.lua', 'config'], {
                 \ 'onout': {job, d->add(cache, d)},
                 \ 'onexit': funcref('LoadXCfg')})
 endf

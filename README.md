@@ -7,7 +7,7 @@ Vim8.0+ 或者 neovim
 
 ## 依赖
 
-* [job.vim](https://github.com/luzhlon/job.vim)
+* job.vim : https://github.com/luzhlon/job.vim
 
 ## 功能
 
