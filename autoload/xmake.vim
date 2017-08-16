@@ -26,17 +26,10 @@ endf
 " Get the bufnr about a target's sourcefiles and headerfiles
 fun! s:targetbufs(t)
     let nrs = {}
-try
-    for i in a:t['sourcefiles']
+    for i in a:t['sourcefiles'] + a:t['headerfiles']
         let n = bufnr(i)
-        if n > 0|let nrs[n] = 1|endif
+        if n > 0 && getbufvar(n, 'mod') | let nrs[n] = 1 | endif
     endfo
-    for i in a:t['headerfiles']
-        let n = bufnr(i)
-        if n > 0|let nrs[n] = 1|endif
-    endfo
-catch
-endt
     return nrs
 endf
 " Get the bufnrs to save
@@ -71,27 +64,25 @@ fun! s:runsh(...)
     endif
 endf
 " If exists a xmake subprocess
-fun! s:checkRunning()
+fun! s:isRunning()
     if job#running(s:job)
         echom 'a xmake task is running'
-        return 0
-    else
         return 1
     endif
+    return 0
 endf
 " If loaded the xmake's configuration
-fun! s:checkXConfig()
+fun! s:notLoaded()
     if exists('g:xmproj')
-        return 1
-    else
-        echom 'not load xmake configuration'
         return 0
     endif
+    echo 'No xmake-project loaded'
+    return 1
 endf
 " Building by xmake
 fun! xmake#buildrun(run)
-    if !s:checkXConfig() | return | endif
-    if !s:checkRunning() | return | endif
+    if s:notLoaded() | return | endif
+    if s:isRunning() | return | endif
     call s:savafiles()          " save files about the target to build
     let run = a:run
     let bin = s:getbin()
@@ -103,7 +94,7 @@ fun! xmake#buildrun(run)
             echo 'build success'
             if run
                 if empty(bin)
-                    echo 'targetfile unkown'
+                    echo 'Not a binary'
                 else
                     call s:runsh(bin)
                 endif
@@ -112,30 +103,50 @@ fun! xmake#buildrun(run)
     endf
     cexpr ''
     " startup the xmake
-    let s:job = job#start(['xmake build', s:target], {
-                \ 'onout': funcref('job#cb_add2qf'),
-                \ 'onerr': funcref('job#cb_add2qf'),
-                \ 'onexit': funcref('OnQuit')})
+    let s:job = job#start(['xmake', 'build', s:target], {
+                    \ 'onout': funcref('job#cb_add2qf'),
+                    \ 'onerr': funcref('job#cb_add2qf'),
+                    \ 'onexit': funcref('OnQuit')})
 endf
-" Run xmake in the background
-fun! xmake#xmake(args)
-    if !s:checkRunning() | return | endif
-    cexpr ''
-    let opts = { 'onout': funcref('job#cb_add2qf') }
-    if a:args =~ '^\s*config'
-        let opts.onexit = {job, code -> xmake#load()}
+" Interpret XMake command
+fun! xmake#xmake(...)
+    if !a:0                             " building all targets without running
+        let s:target = ''
+        call xmake#buildrun(0)
+    elseif a:1 == 'run' || a:1 == 'r'   " building && running
+        if a:0 > 1 | let s:target = a:2 | endif
+        call xmake#buildrun(1)
+    elseif a:1 == 'build'               " building specific target
+        if a:0 > 1 | let s:target = a:2 | endif
+        call xmake#buildrun(0)
+    else                                " else xmake's commands
+        if s:isRunning() | return | endif
+        cexpr ''
+        let opts = { 'onout': funcref('job#cb_add2qf') }
+        if a:1 == 'config' || a:1 == 'f'
+            let opts.onexit = {job, code -> xmake#load()}
+        endif
+        let s:job = job#start(['xmake'] + a:000, opts)
     endif
-    let s:job = job#start('xmake ' . a:args, opts)
 endf
 
 fun! s:onLoaded(...)
+    " Check the fields
+    for t in values(g:xmproj['targets'])
+        if empty(t.headerfiles)
+            let t.headerfiles = []
+        endif
+        if empty(t.sourcefiles)
+            let t.sourcefiles = []
+        endif
+    endfo
     echohl Define
-    echom "Loaded xmake's configuration successfully"
+    echom "XMake-Project loaded successfully"
+    echohl
     set title
     let config = g:xmproj.config
     let &titlestring = join([g:xmproj['name'], config.mode, config.arch], ' - ')
     redraw
-    echohl
 endf
 
 let s:path = expand('<sfile>:p:h')
@@ -143,17 +154,18 @@ fun! xmake#load()
     let cache = []
     fun! LoadXCfg(job, code) closure
         try
-            let m = split(join(cache, ''), '[\r\n]')[0]
-            let g:xmproj = eval(m)
-            call s:onLoaded()
+            let l = split(join(cache, ''), '[\r\n]\+')
+            let g:xmproj = json_decode(l[0])
         catch
-            echohl WarningMsg
-            cexpr m | copen
-            echom "Loaded xmake's configuration unsuccessfully"
-            echohl
+            cexpr ''
+            cadde "XMake-Project loaded unsuccessfully:"
+            " cadde v:errmsg
+            cadde l | copen
+            return
         endt
+        call s:onLoaded()
     endf
-    call job#start(['xmake lua', s:path . '/spy.lua', 'config'], {
+    call job#start(['xmake lua', s:path . '/spy.lua', 'project'], {
                 \ 'onout': {job, d->add(cache, d)},
                 \ 'onexit': funcref('LoadXCfg')})
 endf

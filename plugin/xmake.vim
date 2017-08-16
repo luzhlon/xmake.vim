@@ -4,20 +4,6 @@
 " Function:     commands about xmake
 " Last Change:  2017/7/20
 " =============================================================================
-" Interpret XMake
-fun! s:XMake(...)
-    if !a:0                     " building without running
-        call xmake#buildrun(0)
-    elseif a:1 == 'run'         " building && running
-        if a:0 > 1 | let s:target = a:2 | endif
-        call xmake#buildrun(1)
-    elseif a:1 == 'build'       " building specific target
-        if a:0 > 1 | let s:target = a:2 | endif
-        call xmake#buildrun(0)
-    else                        " else xmake's commands
-        call xmake#xmake(join(a:000))
-    endif
-endf
 " Arguments of 'xmake'
 let s:xmake_args = [ 'run',
                    \ 'config', 'global',
@@ -54,7 +40,7 @@ fun! s:lastarg(args)
 endf
 " Function to complete the xmake args
 fun! s:xmake_complete(a, c, p)
-    let args = split(a:c, '\s\+')
+    let args = split(strpart(a:c, 0, a:p), '\s\+')
     let op = len(args) > 1 ? args[1] : ''
     let larg = args[-1]
     let rets = []
@@ -76,26 +62,35 @@ fun! s:xmake_complete(a, c, p)
         else
             let rets = s:config_args
         endif
+    elseif op == 'project'
+        if larg == '-k'
+            let rets = ['vs2013', 'vs2015', 'vs2017', 'makefile']
+        elseif larg == '--mode=' || larg == '-m'
+            let rets = ['debug', 'release']
+        else
+            let rets = ['-k', '-m']
+        endif
     else
         let rets = s:xmake_args
     endif
+    let g:G = [a:a, a:c, a:p, op, larg, rets]
     return filter(rets, {->v:val =~ a:a})
 endf
 com! -complete=customlist,<SID>xmake_complete
-            \ -nargs=* XMake call <SID>XMake(<q-args>)
+            \ -nargs=* XMake call xmake#xmake(<f-args>)
 
 let s:path = expand('<sfile>:p:h')
 
-fun! s:XMGen()
+fun! s:xmgen()
     exe 'py3file' s:path . '/xmgen.py'
 endf
 
-com! XMLoad call xmake#load()
-com! XMGen  call <SID>XMGen()
+com! XMakeLoad call xmake#load()
+com! XMakeGen  call <SID>xmgen()
 
 let s:xmakefile = 'xmake.lua'
 if filereadable(s:xmakefile)
-    au VimEnter * XMLoad
+    au VimEnter * XMakeLoad
 endif
 
-au BufWritePost xmake.lua XMLoad
+au BufWritePost xmake.lua XMakeLoad
