@@ -88,9 +88,13 @@ endf
 com! XMakeLoad call xmake#load()
 com! XMakeGen  call <SID>xmgen()
 
-let s:xmakefile = 'xmake.lua'
-if filereadable(s:xmakefile)
-    au VimEnter * XMakeLoad
+let arg = argv(0)
+if fnamemodify(arg, ':t') == 'xmake.lua'
+    exe 'bw' arg
+
+    if filereadable(arg)
+        au VimEnter * XMakeLoad
+    endif
 endif
 
 au BufWritePost xmake.lua XMakeLoad
