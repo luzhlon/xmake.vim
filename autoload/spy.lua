@@ -67,6 +67,13 @@ actions.getenv = function(args)
     end
     print(tojson(list))
 end
+actions.incdirs = function(args)
+    config.load()
+    for name, target in pairs(project.targets()) do
+        print(target:get('includedirs'))
+    end
+    print(os.getenv('INCLUDE'))
+end
 -- Action: project ----- get the project's configuration
 actions.project = function(args)
     config.load()

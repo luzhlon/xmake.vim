@@ -28,7 +28,7 @@ fun! s:targetbufs(t)
     let nrs = {}
     for i in a:t['sourcefiles'] + a:t['headerfiles']
         let n = bufnr(i)
-        if n > 0 && getbufvar(n, 'mod') | let nrs[n] = 1 | endif
+        if n > 0 && getbufvar(n, '&mod') | let nrs[n] = 1 | endif
     endfo
     return nrs
 endf
