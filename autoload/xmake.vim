@@ -9,20 +9,6 @@
 let s:job = 0       " subprocess of xmake
 let s:run = 0       " run this command after building successfully
 let s:target = ''   " target to build, build ALL if empty
-" Get the target's file path whoes kind is 'binary'
-fun! s:getbin()
-    if empty(s:target)
-        for tf in values(g:xmproj['targets'])
-            if tf['targetkind'] == 'binary'
-                return tf['targetfile']
-            endif
-        endfo
-        return ''
-    else
-        let tf = g:xmproj['targets'][s:target]
-        return tf['targetkind'] == 'binary' ? tf['targetfile'] : ''
-    endif
-endf
 " Get the bufnr about a target's sourcefiles and headerfiles
 fun! s:targetbufs(t)
     let nrs = {}
@@ -35,11 +21,13 @@ endf
 " Get the bufnrs to save
 fun! s:buf2save()
     if empty(s:target)
+        " Save all target's file
         let nrs = {}
         for tf in values(g:xmproj['targets'])
             call extend(nrs, s:targetbufs(tf))
         endfo
     else
+        " Save s:target's file
         let nrs = s:targetbufs(g:xmproj['targets'][s:target])
     endif
     return keys(nrs)
@@ -55,13 +43,23 @@ fun! s:savafiles()
     exe 'b!' n
 endf
 " Run shell command
-fun! s:runsh(...)
-    let p = join(a:000)
-    if has('win32')
-        exe '!start' p
-    else
-        exe '!./' p
+fun! s:runsh(cmd)
+    let p = a:cmd
+    if type(p) == v:t_list
+        let p = join(p)
+    elseif has('unix') && p !~ '^\/'
+    " Absolute path
+        let p = './' . p
     endif
+    try
+        return qrun#exec(p)
+    catch /E117/
+        if has('win32')
+            exe '!start' p
+        else
+            exe '!./' . p
+        endif
+    endt
 endf
 " If exists a xmake subprocess
 fun! s:isRunning()
@@ -80,30 +78,33 @@ fun! s:notLoaded()
     return 1
 endf
 " Building by xmake
-fun! xmake#buildrun(run)
+fun! xmake#buildrun(...)
     if s:notLoaded() | return | endif
     if s:isRunning() | return | endif
     call s:savafiles()          " save files about the target to build
-    let run = a:run
-    let bin = s:getbin()
+    let run = a:0 && a:1
+    let bin = get(g:xmproj.targets, s:target, '')
+    let color = $COLORTERM
     fun! OnQuit(job, code) closure
+        let $COLORTERM = color
         if a:code               " open the quickfix if any errors
-            echo 'build failure'
+            echohl Error | echo 'build failure' | echohl
             copen
         else
-            echo 'build success'
+            echohl MoreMsg | echo 'build success' bin | echohl
             if run
-                if empty(bin)
-                    echo 'Not a binary'
-                else
-                    call s:runsh(bin)
-                endif
+                call s:runsh(empty(bin) ? ['xmake', 'run']: bin)
             endif
         endif
     endf
     cexpr ''
+    let $COLORTERM = 'nocolor'
     " startup the xmake
-    let s:job = job#start(['xmake', 'build', s:target], {
+    let cmd = empty(s:target) ? 'xmake': ['xmake', 'build', s:target]
+    if has_key(g:xmproj, 'compiler')
+        exe 'compiler' g:xmproj['compiler']
+    endif
+    let s:job = job#start(cmd, {
                     \ 'onout': funcref('job#cb_add2qf'),
                     \ 'onerr': funcref('job#cb_add2qf'),
                     \ 'onexit': funcref('OnQuit')})
@@ -112,13 +113,13 @@ endf
 fun! xmake#xmake(...)
     if !a:0                             " building all targets without running
         let s:target = ''
-        call xmake#buildrun(0)
+        call xmake#buildrun()
     elseif a:1 == 'run' || a:1 == 'r'   " building && running
         if a:0 > 1 | let s:target = a:2 | endif
         call xmake#buildrun(1)
     elseif a:1 == 'build'               " building specific target
         if a:0 > 1 | let s:target = a:2 | endif
-        call xmake#buildrun(0)
+        call xmake#buildrun()
     else                                " else xmake's commands
         if s:isRunning() | return | endif
         cexpr ''
@@ -130,7 +131,7 @@ fun! xmake#xmake(...)
     endif
 endf
 
-fun! s:onLoaded(...)
+fun! s:onload(...)
     " Check the fields
     for t in values(g:xmproj['targets'])
         if empty(t.headerfiles)
@@ -140,32 +141,54 @@ fun! s:onLoaded(...)
             let t.sourcefiles = []
         endif
     endfo
-    echohl Define
+    " Change UI
+    echohl MoreMsg
     echom "XMake-Project loaded successfully"
     echohl
     set title
     let config = g:xmproj.config
     let &titlestring = join([g:xmproj['name'], config.mode, config.arch], ' - ')
     redraw
+    " Find compiler
+    let cc = get(g:xmproj.config, 'cc', '')
+    let cxx = get(g:xmproj.config, 'cxx', '')
+    let compiler = ''
+    if !empty(cxx)
+        let compiler = cxx
+    elseif !empty(cc)
+        let compiler = cc
+    endif
+    if !empty(compiler)
+        let t = {'cl.exe': 'msvc', 'gcc': 'gcc'}
+        let g:xmproj.compiler = t[compiler]
+    endif
 endf
+
+au User XMakeLoaded call <SID>onload()
 
 let s:path = expand('<sfile>:p:h')
 fun! xmake#load()
     let cache = []
+    let tf = tempname()
     fun! LoadXCfg(job, code) closure
+        let err = []
+        if a:code
+            call add(err, 'xmake returned ' . a:code)
+        endif
+        let l = ''
         try
-            let l = split(join(cache, ''), '[\r\n]\+')
+            let l = readfile(tf)
             let g:xmproj = json_decode(l[0])
+            do User XMakeLoaded
         catch
+            let g:_xmake = {}
+            let g:_xmake.tmpfile = tf
+            let g:_xmake.output = l
             cexpr ''
-            cadde "XMake-Project loaded unsuccessfully:"
-            " cadde v:errmsg
-            cadde l | copen
-            return
+            call add(err, "XMake-Project loaded unsuccessfully:")
+            cadde err | cadde cache | copen
         endt
-        call s:onLoaded()
     endf
-    call job#start(['xmake lua', s:path . '/spy.lua', 'project'], {
-                \ 'onout': {job, d->add(cache, d)},
-                \ 'onexit': funcref('LoadXCfg')})
+    let cmdline = ['xmake', 'lua', s:path . '/spy.lua', '-o', tf, 'project']
+    call job#start(cmdline, {'onout': {d->add(cache, d)}, 'onexit': funcref('LoadXCfg') })
 endf
