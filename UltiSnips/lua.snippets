@@ -1,0 +1,41 @@
+
+snippet xmtmp "A template for xmake" b
+set_project '${1:project_name}'
+
+if is_mode 'debug' then
+	set_symbols("debug")
+	set_optimize("none")
+end
+if is_mode 'release' then
+	set_symbols("hidden")
+	set_optimize("fastest")
+	set_strip("all")
+end
+
+target '${2:target_name}'
+	set_kind '${3:target_kind}'
+endsnippet
+
+snippet xmproj "set_project ..."
+set_project "${VISUAL}"
+endsnippet
+
+snippet xmtg "target ..."
+target "${1:name}"
+	set_kind "${2:binary|shared|static}"
+endsnippet
+
+snippet xmisdbg "if is_mode 'debug' then ..."
+if is_mode 'debug' then
+	set_symbols("debug")
+	set_optimize("none")
+end
+endsnippet
+
+snippet xmisrls "if is_mode 'release' then ..."
+if is_mode 'release' then
+	set_symbols("hidden")
+	set_optimize("fastest")
+	set_strip("all")
+end
+endsnippet

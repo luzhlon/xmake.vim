@@ -97,4 +97,18 @@ if fnamemodify(arg, ':t') == 'xmake.lua'
     endif
 endif
 
+fun! s:on_read()
+    if !exists('b:deoplete_sources')
+        if exists('g:deoplete#sources')
+            let b:deoplete_sources = 
+                    \ get(g:deoplete#sources, '_', []) +
+                    \ get(g:deoplete#sources, 'lua', [])
+        else
+            let b:deoplete_sources = []
+        endif
+    endif
+    call add(b:deoplete_sources, 'xmake')
+endf
+
 au BufWritePost xmake.lua XMakeLoad
+au BufRead,BufNew xmake.lua call <sid>on_read()

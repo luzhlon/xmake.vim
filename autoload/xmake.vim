@@ -111,23 +111,25 @@ fun! xmake#buildrun(...)
 endf
 " Interpret XMake command
 fun! xmake#xmake(...)
-    if !a:0                             " building all targets without running
+    let argv = filter(copy(a:000), {i,v->v!=''})
+    let argc = len(argv)
+    if !argc                            " building all targets without running
         let s:target = ''
         call xmake#buildrun()
-    elseif a:1 == 'run' || a:1 == 'r'   " building && running
-        if a:0 > 1 | let s:target = a:2 | endif
+    elseif argv[0] == 'run' || argv[0] == 'r'   " building && running
+        if argc > 1 | let s:target = argv[1] | endif
         call xmake#buildrun(1)
-    elseif a:1 == 'build'               " building specific target
-        if a:0 > 1 | let s:target = a:2 | endif
+    elseif argv[0] == 'build'               " building specific target
+        if argc > 1 | let s:target = argv[1] | endif
         call xmake#buildrun()
     else                                " else xmake's commands
         if s:isRunning() | return | endif
         cexpr ''
         let opts = { 'onout': funcref('job#cb_add2qf') }
-        if a:1 == 'config' || a:1 == 'f'
-            let opts.onexit = {job, code -> xmake#load()}
+        if argv[0] == 'config' || argv[0] == 'f'
+            let opts.onexit = {job, code -> code ? execute('copen'): xmake#load()}
         endif
-        let s:job = job#start(['xmake'] + a:000, opts)
+        let s:job = job#start(['xmake'] + argv, opts)
     endif
 endf
 
