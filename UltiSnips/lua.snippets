@@ -17,12 +17,27 @@ target '${2:target_name}'
 endsnippet
 
 snippet xmproj "set_project ..."
-set_project "${VISUAL}"
+set_project '${1}'
 endsnippet
 
-snippet xmtg "target ..."
-target "${1:name}"
-	set_kind "${2:binary|shared|static}"
+snippet xmtarget "target ..."
+target '${1:name}'
+	set_kind '${2:binary|shared|static}'
+	add_files '${3:*.cpp}'
+endsnippet
+
+snippet xmincdirs "add_includedirs"
+add_includedirs '${1}'
+endsnippet
+
+snippet xmfiles "add_files"
+add_files '${1}'
+endsnippet
+
+snippet xmpackage "on_package ..." b
+on_package(function(target)
+	os.cp('${1:source-file}', '${2:dist-file}')${0}
+end)
 endsnippet
 
 snippet xmisdbg "if is_mode 'debug' then ..."
