@@ -8,8 +8,8 @@ PATH, _ = os.path.split(__file__)
 apis = []
 for docpath in glob.glob(PATH + '/docs/*'):
     path, name = os.path.split(docpath)
-    f = open(docpath)
-    apis.append({'word': name, 'info': f.read()})
+    f = open(docpath, 'rb')
+    apis.append({'word': name, 'info': f.read().decode('utf-8')})
     f.close()
 
 os.aaa = apis
