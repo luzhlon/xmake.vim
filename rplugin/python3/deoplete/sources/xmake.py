@@ -3,18 +3,20 @@ from .base import Base
 import re, os
 import glob
 
-docs = {}
-PATH = __file__
-PATH, _ = os.path.split(PATH)
+PATH, _ = os.path.split(__file__)
+
+apis = []
 for docpath in glob.glob(PATH + '/docs/*'):
     path, name = os.path.split(docpath)
     f = open(docpath)
-    docs[name] = f.read()
+    apis.append({'word': name, 'info': f.read()})
     f.close()
 
-builtin_vars = {
-    'os':            'Get current OS of compiling-system',
-    'host':          'Get current OS of localhost',
+os.aaa = apis
+
+_ = {
+    'os':            'Current OS of compiling-system',
+    'host':          'Current OS of localhost',
     'tmpdir':        'Temporary directory',
     'curdir':        'Current directory',
     'buildir':       'Build directory',
@@ -27,6 +29,8 @@ builtin_vars = {
     'env':           'Get environment variable',
     'reg':           'Get windows register value'
 }
+builtin_vars = [{'word': k, 'menu': v} for k, v in _.items()]
+
 
 class Source(Base):
     def __init__(self, vim):
@@ -47,9 +51,9 @@ class Source(Base):
             return len(input)
 
     def gather_candidates(self, context):
-        global docs, builtin_vars
+        global apis, builtin_vars
 
         if re.search('\$\(\w*$', context['input'][:context['complete_position']]):
-            return [{'word': k, 'menu': builtin_vars[k]} for k in builtin_vars]
+            return builtin_vars
         else:
-            return [{'word': k, 'info': docs.get(k)} for k in docs]
+            return apis

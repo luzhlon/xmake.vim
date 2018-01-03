@@ -36,8 +36,12 @@ endf
 fun! s:savafiles()
     let n = bufnr('%')      " save current bufnr
     let bufnrs = s:buf2save()
+    let xnr = bufnr('xmake.lua')
+    if xnr > 0
+        call add(bufnrs, xnr)
+    endif
     for nr in bufnrs        " traverse project's files, and save them
-        exe nr . 'bufdo!' 'up'
+        sil! exe nr . 'bufdo!' 'up'
     endfo
     " switch to original buffer
     exe 'b!' n
