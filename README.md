@@ -7,7 +7,8 @@ Vim8.0+ 或者 neovim
 
 ## 依赖
 
-[x.vim](https://github.com/luzhlon/x.vim)
+* x.vim     https://github.com/luzhlon/x.vim
+* qrun.vim  https://github.com/luzhlon/qrun.vim
 
 ## 功能
 
