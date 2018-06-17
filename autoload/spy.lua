@@ -53,11 +53,12 @@ local function tojson(t)
     end
     local tt = type(t)
     if tt == 'string' then
-        t = t:gsub('[\\\n\r\t"]', {
-            ['\\'] = '\\\\', ['\n'] = '\\n',
-            ['\t'] = '\\t', ['"'] = '\\"', ['\r'] = '\\r'
-        })
-        return '"' .. t .. '"'
+        -- t = t:gsub('[\\\n\r\t"]', {
+        --     ['\\'] = '\\\\', ['\n'] = '\\n',
+        --     ['\t'] = '\\t', ['"'] = '\\"', ['\r'] = '\\r'
+        -- })
+        -- return '"' .. t .. '"'
+        return string.format('%q', t)
     elseif tt == 'nil' then
         return 'null'
     else            -- number or boolean

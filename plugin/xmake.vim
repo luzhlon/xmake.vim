@@ -28,6 +28,7 @@ let s:config_args = [
             \ '--buildir=', '-o']
 let s:plat_args = ['android', 'iphoneos', 'linux', 'macos', 'mingw', 'watchos', 'windows']
 let s:language_args = ['c', 'c++', 'dlang', 'objc', 'objc++', 'rust', 'swift']
+let s:arch_args = ['x86', 'x64', 'x86_64', 'i386', 'armv7', 'armv7s', 'arm64', 'armv7-a', 'armv7k', 'armv5te', 'armv6', 'armv8-a', 'arm64-v8a']
 " Get the last operation
 fun! s:lastarg(args)
     let i = -1
@@ -42,7 +43,7 @@ endf
 fun! s:xmake_complete(a, c, p)
     let args = split(strpart(a:c, 0, a:p), '\s\+')
     let op = len(args) > 1 ? args[1] : ''
-    let larg = args[-1]
+    let larg = args[-1][0] == '-' ? args[-1] : args[-2]
     let rets = []
     if op == 'run' || op == 'build'
         let rets = keys(g:xmproj['targets'])
@@ -59,6 +60,8 @@ fun! s:xmake_complete(a, c, p)
             let rets = ['static', 'shared', 'binary']
         elseif larg == '--mode=' || larg == '-m'
             let rets = ['debug', 'release']
+        elseif larg == '--arch' || larg == '-a'
+            let rets = s:arch_args
         else
             let rets = s:config_args
         endif
@@ -73,8 +76,7 @@ fun! s:xmake_complete(a, c, p)
     else
         let rets = s:xmake_args
     endif
-    let g:G = [a:a, a:c, a:p, op, larg, rets]
-    return filter(rets, {->v:val =~ a:a})
+    return viml#wildfilter(rets, a:a)
 endf
 com! -complete=customlist,<SID>xmake_complete
             \ -nargs=* XMake call xmake#xmake(<f-args>)

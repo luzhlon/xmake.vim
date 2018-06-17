@@ -9,6 +9,8 @@
 let s:job = 0       " subprocess of xmake
 let s:run = 0       " run this command after building successfully
 let s:target = ''   " target to build, build ALL if empty
+let s:cb_cexpr = {j,d,s->vim#cadde(join(d, "\n"))}
+
 " Get the bufnr about a target's sourcefiles and headerfiles
 fun! s:targetbufs(t)
     let nrs = {}
@@ -33,7 +35,7 @@ fun! s:buf2save()
     return keys(nrs)
 endf
 " Save the file before building
-fun! s:savafiles()
+fun! s:savefiles()
     let n = bufnr('%')      " save current bufnr
     let bufnrs = s:buf2save()
     let xnr = bufnr('xmake.lua')
@@ -46,32 +48,13 @@ fun! s:savafiles()
     " switch to original buffer
     exe 'b!' n
 endf
-" Run shell command
-fun! s:runsh(cmd)
-    let p = a:cmd
-    if type(p) == v:t_list
-        let p = join(p)
-    elseif has('unix') && p !~ '^\/'
-    " Absolute path
-        let p = './' . p
-    endif
-    try
-        return qrun#exec(p)
-    catch /E117/
-        if has('win32')
-            exe '!start' p
-        else
-            exe '!./' . p
-        endif
-    endt
-endf
+
 " If exists a xmake subprocess
 fun! s:isRunning()
-    if job#running(s:job)
+    if !empty(s:job) && job#status(s:job) == 'run'
         echom 'a xmake task is running'
         return 1
     endif
-    return 0
 endf
 " If loaded the xmake's configuration
 fun! s:notLoaded()
@@ -85,19 +68,25 @@ endf
 fun! xmake#buildrun(...)
     if s:notLoaded() | return | endif
     if s:isRunning() | return | endif
-    call s:savafiles()          " save files about the target to build
+    " call s:savefiles()          " save files about the target to build
+    wall
     let run = a:0 && a:1
-    let bin = get(g:xmproj.targets, s:target, '')
     let color = $COLORTERM
-    fun! OnQuit(job, code) closure
+    fun! OnQuit(job, code, stream) closure
         let $COLORTERM = color
         if a:code               " open the quickfix if any errors
             echohl Error | echo 'build failure' | echohl
+            cadde 'xmake returned ' . a:code
             copen
         else
-            echohl MoreMsg | echo 'build success' bin | echohl
+            echohl MoreMsg | echo 'build success' s:target | echohl
             if run
-                call s:runsh(empty(bin) ? ['xmake', 'run']: bin)
+                let t = get(get(g:xmproj['targets'], s:target, {}), 'targetfile')
+                if empty(t)
+                    call viml#echohl('Error', 'Target not exists:', s:target)
+                else
+                    call qrun#exec(empty(s:target) ? ['xmake', 'run']: t)
+                endif
             endif
         endif
     endf
@@ -109,9 +98,9 @@ fun! xmake#buildrun(...)
         exe 'compiler' g:xmproj['compiler']
     endif
     let s:job = job#start(cmd, {
-                    \ 'onout': funcref('job#cb_add2qf'),
-                    \ 'onerr': funcref('job#cb_add2qf'),
-                    \ 'onexit': funcref('OnQuit')})
+                    \ 'on_stdout': s:cb_cexpr,
+                    \ 'on_stderr': s:cb_cexpr,
+                    \ 'on_exit': funcref('OnQuit')})
 endf
 " Interpret XMake command
 fun! xmake#xmake(...)
@@ -129,9 +118,9 @@ fun! xmake#xmake(...)
     else                                " else xmake's commands
         if s:isRunning() | return | endif
         cexpr ''
-        let opts = { 'onout': funcref('job#cb_add2qf') }
+        let opts = {'on_stdout': s:cb_cexpr}
         if argv[0] == 'config' || argv[0] == 'f'
-            let opts.onexit = {job, code -> code ? execute('copen'): xmake#load()}
+            let opts.on_exit = {job, code -> code ? execute('copen'): xmake#load()}
         endif
         let s:job = job#start(['xmake'] + argv, opts)
     endif
@@ -176,7 +165,8 @@ let s:path = expand('<sfile>:p:h')
 fun! xmake#load()
     let cache = []
     let tf = tempname()
-    fun! LoadXCfg(job, code) closure
+    fun! LoadXCfg(job, code, stream) closure
+        call log#('LoadXCfg entered.')
         let err = []
         if a:code
             call add(err, 'xmake returned ' . a:code)
@@ -196,5 +186,7 @@ fun! xmake#load()
         endt
     endf
     let cmdline = ['xmake', 'lua', s:path . '/spy.lua', '-o', tf, 'project']
-    call job#start(cmdline, {'onout': {d->add(cache, d)}, 'onexit': funcref('LoadXCfg') })
+    call log#(cmdline)
+    let Callback = {job, data, stream->add(cache, data)}
+    call log#('xmake job', job#start(cmdline, {'on_stdout': Callback, 'on_exit': funcref('LoadXCfg')}))
 endf
