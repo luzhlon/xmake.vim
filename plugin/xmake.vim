@@ -92,8 +92,7 @@ com! XMakeGen  call <SID>xmgen()
 
 let arg = argv(0)
 if fnamemodify(arg, ':t') == 'xmake.lua'
-    exe 'bw' arg
-
+    " exe 'bw' arg
     if filereadable(arg)
         au VimEnter * XMakeLoad
     endif
