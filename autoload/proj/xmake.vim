@@ -1,7 +1,6 @@
 
 fun! s:CheckXMake()
-    let dir = g:Proj.dir
-    let f = dir . '/xmake.lua'
+    let f = g:Proj.workdir . '/xmake.lua'
     if filereadable(f)
         call xmake#load()
     endif

@@ -118,7 +118,7 @@ fun! xmake#xmake(...)
     else                                " else xmake's commands
         if s:isRunning() | return | endif
         cexpr ''
-        let opts = {'on_stdout': s:cb_cexpr}
+        let opts = {'on_stdout': s:cb_cexpr, 'on_stderr': s:cb_cexpr}
         if argv[0] == 'config' || argv[0] == 'f'
             let opts.on_exit = {job, code -> code ? execute('copen'): xmake#load()}
         endif
